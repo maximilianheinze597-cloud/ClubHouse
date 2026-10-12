@@ -1,0 +1,4 @@
+project_id = "clubhouse-svhs"
+
+[functions.open-pack]
+verify_jwt = true
