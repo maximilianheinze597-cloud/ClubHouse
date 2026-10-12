@@ -1,0 +1,4 @@
+import {describe,it,expect} from 'vitest';
+import {pickRarity,totalSquadRating,type Rarity,type Card} from '../src/domain';
+const w:Record<Rarity,number>={Bronze:55,Silber:30,Gold:12,Ultimate:2.8,Legendär:.2};
+describe('domain rules',()=>{it('calculates squad average',()=>expect(totalSquadRating([{rating:80},{rating:60}] as Card[])).toBe(70));it('selects rarity at boundaries',()=>{expect(pickRarity(0,w)).toBe('Bronze');expect(pickRarity(.55,w)).toBe('Silber');expect(pickRarity(.85,w)).toBe('Gold');expect(pickRarity(.999,w)).toBe('Legendär')});it('rejects weights that do not sum to 100',()=>expect(()=>pickRarity(.5,{...w,Gold:10})).toThrow())});
