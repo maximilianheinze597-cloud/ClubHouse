@@ -28,6 +28,9 @@ The broader production scope still needs real auth screens and frontend integrat
 No verified match results, official logos or player photographs are bundled. Sample card ratings are game-only values. Get consent and appropriate rights before uploading any real player photos, particularly for minors.
 
 ## Supabase
+
+A sample seed script is provided at `supabase/seed.sql` for fictional game characters and the Starter/Gold pack odds. Review it before applying; the Ultimate pack intentionally remains inactive until its server-side guarantee rule is implemented. A GitHub Actions workflow runs the dependency install, tests and build on pushes/PRs.
+
 1. Create a Supabase project and install the Supabase CLI.
 2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`. Never expose a service-role key.
 3. Link the project and review/apply migrations: `supabase link --project-ref YOUR_REF`, then `supabase db push`.
