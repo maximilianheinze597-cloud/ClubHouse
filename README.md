@@ -10,7 +10,8 @@ Mobile-first React + TypeScript app for the SVHS club hub and **CLUBHOUSE: ULTIM
 - Supabase schema migrations for profiles/roles, club roster and fixtures, card catalog/inventory, album, objectives, points ledger, packs, squads, AI opponents, trades and audit history.
 - Server-side atomic pack opening with idempotency, versioned odds snapshots and guarantee support.
 - Server-side AI match simulation and duplicate-card upgrade RPCs.
-- Server-side card-only trade creation/acceptance RPCs.
+- Server-side card-only trade creation/acceptance/reject/withdraw RPCs with ownership and reservation checks.
+- Role-gated trainer/admin forms for adding roster players, match fixtures and published news.
 - Seed data for fictional game-only cards, sample pack odds, AI opponents and objectives.
 - PWA manifest, original SVG icon and offline shell service worker.
 - GitHub Actions CI plus GitHub Pages deployment workflow.
@@ -30,7 +31,7 @@ A lockfile is not committed yet, so `npm install` creates one locally. The CI wo
 ## Demo mode vs. connected mode
 Without `.env.local`, the app runs in local preview mode. Preview cards, packs, Club Points and match results are stored only in that browser; they are not server-verified and do not sync between users.
 
-To enable accounts and server-backed game actions, configure Supabase below. The UI then uses Supabase Auth, loads the user's balance/inventory, and calls the Edge Function/RPCs for pack openings, match rewards and card upgrades. Trading RPCs exist in the database, but a complete trade-management screen and end-to-end verification are still outstanding. Admin CRUD, real push delivery, image upload validation, attendance/polls, complete standings/statistics and comprehensive end-to-end tests are also not yet finished. This is an implemented core, not a claim that every item in the full specification is production-ready.
+To enable accounts and server-backed game actions, configure Supabase below. The UI then uses Supabase Auth, loads the user's balance/inventory, and calls the Edge Function/RPCs for pack openings, match rewards and card upgrades. The trade-management screen supports card offers, acceptance, rejection and withdrawal when Supabase is configured. End-to-end verification is still outstanding. Admin CRUD, real push delivery, image upload validation, attendance/polls, complete standings/statistics and comprehensive end-to-end tests are also not yet finished. This is an implemented core, not a claim that every item in the full specification is production-ready.
 
 No real player photos, verified match results or official third-party game assets are bundled. Starter card names and ratings in the game catalog are fictional/game-only. Obtain appropriate consent and usage rights before adding real photos, especially for minors.
 
