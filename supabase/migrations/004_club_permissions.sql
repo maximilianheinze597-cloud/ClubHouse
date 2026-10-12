@@ -1,0 +1,35 @@
+-- Read access for authenticated club members and server-checked staff write policies.
+create policy "seasons read" on public.seasons for select to authenticated using(true);
+create policy "teams read" on public.teams for select to authenticated using(true);
+create policy "player season stats read" on public.player_seasons for select to authenticated using(true);
+create policy "competitions read" on public.competitions for select to authenticated using(true);
+create policy "matches read" on public.matches for select to authenticated using(true);
+create policy "match events read" on public.match_events for select to authenticated using(true);
+create policy "lineups read" on public.lineups for select to authenticated using(true);
+create policy "transfers read" on public.transfers for select to authenticated using(true);
+create policy "polls read" on public.polls for select to authenticated using(true);
+create policy "poll votes read" on public.poll_votes for select to authenticated using(true);
+create policy "own poll vote insert" on public.poll_votes for insert to authenticated with check(user_id=auth.uid());
+create policy "own poll vote delete" on public.poll_votes for delete to authenticated using(user_id=auth.uid());
+
+create policy "staff manage seasons" on public.seasons for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage teams" on public.teams for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage players" on public.players for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage player stats" on public.player_seasons for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage competitions" on public.competitions for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage matches" on public.matches for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage match events" on public.match_events for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage lineups" on public.lineups for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage transfers" on public.transfers for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage news" on public.news for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage calendar" on public.calendar_events for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "staff manage polls" on public.polls for all to authenticated using(public.has_role('admin') or public.has_role('trainer')) with check(public.has_role('admin') or public.has_role('trainer'));
+create policy "admin manage roles" on public.user_roles for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
+create policy "admin read audit logs" on public.audit_logs for select to authenticated using(public.has_role('admin'));
+create policy "admin manage card catalog" on public.card_definitions for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
+create policy "admin manage packs" on public.pack_definitions for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
+create policy "admin manage AI opponents" on public.ai_opponents for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
+create policy "admin manage objectives" on public.objectives for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
+create policy "admin manage rewards" on public.reward_definitions for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
+create policy "admin manage albums" on public.card_album_definitions for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
+create policy "admin manage album slots" on public.album_slots for all to authenticated using(public.has_role('admin')) with check(public.has_role('admin'));
