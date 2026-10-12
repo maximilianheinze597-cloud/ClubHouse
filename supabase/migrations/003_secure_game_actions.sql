@@ -22,6 +22,7 @@ begin
  select * into opp from public.ai_opponents where id=p_opponent_id and is_active=true;
  if not found then select * into opp from public.ai_opponents where is_active=true order by overall limit 1; end if;
  if not found then raise exception 'no_active_ai_opponent'; end if;
+ if (select count(*) from public.simulated_matches where user_id=uid and created_at>now()-interval '24 hours')>=20 then raise exception 'daily_match_limit_reached'; end if;
  select coalesce(round(avg(d.overall+i.upgrade_level)),55)::integer into team_rating from public.card_inventory i join public.card_definitions d on d.id=i.card_definition_id where i.user_id=uid and not i.locked;
  home_goals:=greatest(0,least(6,round(1.25+(team_rating-opp.overall)::numeric/17+random()*2.5)::integer));
  away_goals:=greatest(0,least(6,round(1.2+(opp.overall-team_rating)::numeric/19+random()*2.5)::integer));
@@ -84,6 +85,7 @@ begin
  select id into offer_id from public.trade_offers where sender_id=uid and idempotency_key=p_idempotency_key;
  if offer_id is not null then return jsonb_build_object('offer_id',offer_id,'replayed',true); end if;
  if exists(select 1 from unnest(p_give_inventory_ids) x group by x having count(*)>1) or exists(select 1 from unnest(p_want_card_definition_ids) x group by x having count(*)>1) then raise exception 'duplicate_card_id_in_trade'; end if;
+ perform 1 from public.card_inventory where id=any(p_give_inventory_ids) for update;
  if exists(select 1 from unnest(p_give_inventory_ids) x left join public.card_inventory i on i.id=x and i.user_id=uid and not i.locked where i.id is null) then raise exception 'offered_card_not_owned'; end if;
  if exists(select 1 from unnest(p_want_card_definition_ids) x left join public.card_definitions d on d.id=x and d.is_available where d.id is null) then raise exception 'requested_card_definition_unavailable'; end if;
  if exists(select 1 from public.trade_offer_items ti join public.trade_offers t on t.id=ti.offer_id where ti.inventory_id=any(p_give_inventory_ids) and t.status='pending') then raise exception 'card_already_reserved'; end if;
@@ -114,6 +116,7 @@ begin
  if found then return jsonb_build_object('offer_id',p_offer_id,'status','completed','replayed',true); end if;
  if offer.receiver_id<>uid then raise exception 'only_receiver_can_accept'; end if;
  if offer.status<>'pending' then raise exception 'trade_not_pending'; end if;
+ perform 1 from public.card_inventory where id in(select inventory_id from public.trade_offer_items where offer_id=offer.id and side='give') for update;
  if exists(select 1 from public.trade_offer_items ti left join public.card_inventory i on i.id=ti.inventory_id where ti.offer_id=offer.id and ti.side='give' and (i.id is null or i.user_id<>ti.owner_id or i.locked)) then raise exception 'trade_card_ownership_changed'; end if;
  if exists(select 1 from public.trade_offer_items ti join public.trade_offer_items other on other.inventory_id=ti.inventory_id and other.offer_id<>ti.offer_id join public.trade_offers ot on ot.id=other.offer_id and ot.status='pending' where ti.offer_id=offer.id and ti.side='give') then raise exception 'trade_card_reserved_elsewhere'; end if;
  -- Resolve each requested definition to an actual card owned by the receiver.
