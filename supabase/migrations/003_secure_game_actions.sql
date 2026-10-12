@@ -4,6 +4,8 @@ create unique index if not exists simulated_matches_user_idempotency on public.s
 alter table public.card_upgrade_history add column if not exists idempotency_key uuid;
 create unique index if not exists card_upgrade_history_user_idempotency on public.card_upgrade_history(user_id,idempotency_key) where idempotency_key is not null;
 alter table public.trade_offer_items add column if not exists side text not null default 'give';
+alter table public.trade_offer_items alter column inventory_id drop not null;
+alter table public.trade_offer_items add column if not exists card_definition_id uuid references public.card_definitions(id);
 do $$ begin alter table public.trade_offer_items add constraint trade_item_side_check check(side in('give','want')); exception when duplicate_object then null; end $$;
 alter table public.trade_offers add column if not exists idempotency_key uuid;
 create unique index if not exists trade_offers_sender_idempotency on public.trade_offers(sender_id,idempotency_key) where idempotency_key is not null;
@@ -70,24 +72,29 @@ revoke all on function public.upgrade_card(uuid,uuid,uuid) from public,anon;
 grant execute on function public.upgrade_card(uuid,uuid,uuid) to authenticated;
 create policy "own upgrade history read" on public.card_upgrade_history for select to authenticated using(user_id=auth.uid() or public.has_role('admin'));
 
-create or replace function public.create_trade_offer(p_receiver_id uuid,p_give_inventory_ids uuid[],p_want_inventory_ids uuid[],p_idempotency_key uuid)
+create or replace function public.create_trade_offer(p_receiver_id uuid,p_give_inventory_ids uuid[],p_want_card_definition_ids uuid[],p_idempotency_key uuid)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare uid uuid:=auth.uid(); offer_id uuid; item_id uuid; card_id uuid;
+declare uid uuid:=auth.uid(); offer_id uuid; card_id uuid; def_id uuid;
 begin
  if uid is null then raise exception 'authentication_required'; end if;
  if p_receiver_id is null or p_receiver_id=uid or p_idempotency_key is null then raise exception 'invalid_trade_request'; end if;
- if coalesce(cardinality(p_give_inventory_ids),0)<1 or coalesce(cardinality(p_want_inventory_ids),0)<1 then raise exception 'trade_requires_cards_on_both_sides'; end if;
- if cardinality(p_give_inventory_ids)>5 or cardinality(p_want_inventory_ids)>5 then raise exception 'trade_card_limit_exceeded'; end if;
+ if coalesce(cardinality(p_give_inventory_ids),0)<1 or coalesce(cardinality(p_want_card_definition_ids),0)<1 then raise exception 'trade_requires_cards_on_both_sides'; end if;
+ if cardinality(p_give_inventory_ids)>5 or cardinality(p_want_card_definition_ids)>5 then raise exception 'trade_card_limit_exceeded'; end if;
  perform pg_advisory_xact_lock(hashtextextended(uid::text||':trade:'||p_idempotency_key::text,0));
  select id into offer_id from public.trade_offers where sender_id=uid and idempotency_key=p_idempotency_key;
  if offer_id is not null then return jsonb_build_object('offer_id',offer_id,'replayed',true); end if;
- if exists(select 1 from unnest(p_give_inventory_ids) x group by x having count(*)>1) or exists(select 1 from unnest(p_want_inventory_ids) x group by x having count(*)>1) then raise exception 'duplicate_card_id_in_trade'; end if;
+ if exists(select 1 from unnest(p_give_inventory_ids) x group by x having count(*)>1) or exists(select 1 from unnest(p_want_card_definition_ids) x group by x having count(*)>1) then raise exception 'duplicate_card_id_in_trade'; end if;
  if exists(select 1 from unnest(p_give_inventory_ids) x left join public.card_inventory i on i.id=x and i.user_id=uid and not i.locked where i.id is null) then raise exception 'offered_card_not_owned'; end if;
- if exists(select 1 from unnest(p_want_inventory_ids) x left join public.card_inventory i on i.id=x and i.user_id=p_receiver_id and not i.locked where i.id is null) then raise exception 'requested_card_not_owned_by_receiver'; end if;
- if exists(select 1 from public.trade_offer_items ti join public.trade_offers t on t.id=ti.offer_id where ti.inventory_id=any(p_give_inventory_ids||p_want_inventory_ids) and t.status='pending') then raise exception 'card_already_reserved'; end if;
+ if exists(select 1 from unnest(p_want_card_definition_ids) x left join public.card_definitions d on d.id=x and d.is_available where d.id is null) then raise exception 'requested_card_definition_unavailable'; end if;
+ if exists(select 1 from public.trade_offer_items ti join public.trade_offers t on t.id=ti.offer_id where ti.inventory_id=any(p_give_inventory_ids) and t.status='pending') then raise exception 'card_already_reserved'; end if;
  insert into public.trade_offers(sender_id,receiver_id,status,idempotency_key) values(uid,p_receiver_id,'pending',p_idempotency_key) returning id into offer_id;
- foreach card_id in array p_give_inventory_ids loop insert into public.trade_offer_items(offer_id,inventory_id,owner_id,side) values(offer_id,card_id,uid,'give'); end loop;
- foreach card_id in array p_want_inventory_ids loop insert into public.trade_offer_items(offer_id,inventory_id,owner_id,side) values(offer_id,card_id,p_receiver_id,'want'); end loop;
+ foreach card_id in array p_give_inventory_ids loop
+   select card_definition_id into def_id from public.card_inventory where id=card_id and user_id=uid;
+   insert into public.trade_offer_items(offer_id,inventory_id,owner_id,side,card_definition_id) values(offer_id,card_id,uid,'give',def_id);
+ end loop;
+ foreach def_id in array p_want_card_definition_ids loop
+   insert into public.trade_offer_items(offer_id,inventory_id,owner_id,side,card_definition_id) values(offer_id,null,p_receiver_id,'want',def_id);
+ end loop;
  insert into public.notifications(user_id,title,body) values(p_receiver_id,'Neue Tauschanfrage','Du hast eine neue Karten-Tauschanfrage erhalten.');
  return jsonb_build_object('offer_id',offer_id,'replayed',false);
 end $$;
@@ -96,7 +103,7 @@ grant execute on function public.create_trade_offer(uuid,uuid[],uuid[],uuid) to 
 
 create or replace function public.accept_trade(p_offer_id uuid,p_idempotency_key uuid)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
-declare uid uuid:=auth.uid(); offer public.trade_offers%rowtype; existing public.completed_trades%rowtype; card_row record; moved integer:=0;
+declare uid uuid:=auth.uid(); offer public.trade_offers%rowtype; existing public.completed_trades%rowtype; card_row record; selected_inventory uuid; moved integer:=0;
 begin
  if uid is null then raise exception 'authentication_required'; end if;
  if p_offer_id is null or p_idempotency_key is null then raise exception 'trade_parameters_required'; end if;
@@ -107,8 +114,19 @@ begin
  if found then return jsonb_build_object('offer_id',p_offer_id,'status','completed','replayed',true); end if;
  if offer.receiver_id<>uid then raise exception 'only_receiver_can_accept'; end if;
  if offer.status<>'pending' then raise exception 'trade_not_pending'; end if;
+ if exists(select 1 from public.trade_offer_items ti left join public.card_inventory i on i.id=ti.inventory_id where ti.offer_id=offer.id and ti.side='give' and (i.id is null or i.user_id<>ti.owner_id or i.locked)) then raise exception 'trade_card_ownership_changed'; end if;
+ if exists(select 1 from public.trade_offer_items ti join public.trade_offer_items other on other.inventory_id=ti.inventory_id and other.offer_id<>ti.offer_id join public.trade_offers ot on ot.id=other.offer_id and ot.status='pending' where ti.offer_id=offer.id and ti.side='give') then raise exception 'trade_card_reserved_elsewhere'; end if;
+ -- Resolve each requested definition to an actual card owned by the receiver.
+ for card_row in select id,card_definition_id from public.trade_offer_items where offer_id=offer.id and side='want' for update loop
+   select i.id into selected_inventory from public.card_inventory i
+   where i.user_id=uid and i.card_definition_id=card_row.card_definition_id and not i.locked
+     and not exists(select 1 from public.trade_offer_items other join public.trade_offers ot on ot.id=other.offer_id where other.inventory_id=i.id and ot.status='pending' and other.offer_id<>offer.id)
+   order by i.obtained_at limit 1 for update;
+   if selected_inventory is null then raise exception 'requested_card_not_available'; end if;
+   update public.trade_offer_items set inventory_id=selected_inventory where id=card_row.id;
+   selected_inventory:=null;
+ end loop;
  if exists(select 1 from public.trade_offer_items ti left join public.card_inventory i on i.id=ti.inventory_id where ti.offer_id=offer.id and (i.id is null or i.user_id<>ti.owner_id or i.locked)) then raise exception 'trade_card_ownership_changed'; end if;
- if exists(select 1 from public.trade_offer_items ti join public.trade_offer_items other on other.inventory_id=ti.inventory_id and other.offer_id<>ti.offer_id join public.trade_offers ot on ot.id=other.offer_id and ot.status='pending' where ti.offer_id=offer.id) then raise exception 'trade_card_reserved_elsewhere'; end if;
  for card_row in select inventory_id,owner_id,side from public.trade_offer_items where offer_id=offer.id for update loop
    update public.card_inventory set user_id=case when card_row.side='give' then offer.receiver_id else offer.sender_id end where id=card_row.inventory_id and user_id=card_row.owner_id;
    if not found then raise exception 'trade_card_transfer_failed'; end if;
@@ -123,3 +141,21 @@ begin
 end $$;
 revoke all on function public.accept_trade(uuid,uuid) from public,anon;
 grant execute on function public.accept_trade(uuid,uuid) to authenticated;
+
+create or replace function public.close_trade(p_offer_id uuid,p_action text)
+returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
+declare uid uuid:=auth.uid(); offer public.trade_offers%rowtype; new_status text;
+begin
+ if uid is null then raise exception 'authentication_required'; end if;
+ if p_action not in('rejected','withdrawn') then raise exception 'invalid_trade_action'; end if;
+ select * into offer from public.trade_offers where id=p_offer_id for update;
+ if not found then raise exception 'trade_not_found'; end if;
+ if offer.status<>'pending' then raise exception 'trade_not_pending'; end if;
+ if p_action='rejected' and offer.receiver_id<>uid then raise exception 'only_receiver_can_reject'; end if;
+ if p_action='withdrawn' and offer.sender_id<>uid then raise exception 'only_sender_can_withdraw'; end if;
+ update public.trade_offers set status=p_action where id=offer.id;
+ insert into public.audit_logs(actor_id,action,target_type,target_id,reason) values(uid,'trade_'||p_action,'trade_offer',offer.id::text,'Participant closed pending offer');
+ return jsonb_build_object('offer_id',offer.id,'status',p_action);
+end $$;
+revoke all on function public.close_trade(uuid,text) from public,anon;
+grant execute on function public.close_trade(uuid,text) to authenticated;
