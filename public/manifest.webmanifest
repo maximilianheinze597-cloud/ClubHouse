@@ -1,1 +1,1 @@
-{"name":"CLUBHOUSE · SVHS","short_name":"CLUBHOUSE","start_url":"/","display":"standalone","background_color":"#080e0a","theme_color":"#08110d","description":"Vereins-App und Ultimate Team für SV Hausgemachter Salat","icons":[]}
+{"name":"CLUBHOUSE · SVHS","short_name":"CLUBHOUSE","start_url":"./","scope":"./","display":"standalone","background_color":"#080e0a","theme_color":"#08110d","description":"Vereins-App und Ultimate Team für SV Hausgemachter Salat","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
