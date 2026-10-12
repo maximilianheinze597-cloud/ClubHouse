@@ -11,10 +11,31 @@ drop policy if exists "own pack opening items read" on public.pack_opening_items
 create policy "own pack opening items read" on public.pack_opening_items for select to authenticated
  using(exists(select 1 from public.pack_openings o where o.id=opening_id and (o.user_id=auth.uid() or public.has_role('admin'))));
 
+
+-- Keep an immutable, monotonically versioned probability snapshot whenever a pack is created or its weights change.
+create or replace function public.version_pack_probabilities() returns trigger
+language plpgsql security definer set search_path=public,pg_temp as $$
+declare next_version integer;
+begin
+ if tg_op='INSERT' then next_version:=1;
+ else
+   if new.rarity_weights is not distinct from old.rarity_weights then return new; end if;
+   select coalesce(max(version),0)+1 into next_version from public.pack_probability_versions where pack_id=new.id;
+ end if;
+ insert into public.pack_probability_versions(pack_id,version,rarity_weights)
+ values(new.id,next_version,new.rarity_weights)
+ on conflict(pack_id,version) do nothing;
+ return new;
+end $$;
+drop trigger if exists pack_probability_version_trigger on public.pack_definitions;
+create trigger pack_probability_version_trigger after insert or update of rarity_weights on public.pack_definitions
+for each row execute function public.version_pack_probabilities();
+
 create or replace function public.open_pack(p_pack_id uuid,p_idempotency_key uuid)
 returns jsonb language plpgsql security definer set search_path=public,pg_temp as $$
 declare
  uid uuid:=auth.uid();
+ version_row public.pack_probability_versions%rowtype;
  p public.pack_definitions%rowtype;
  bal bigint;
  opening uuid;
@@ -49,7 +70,12 @@ begin
    and (available_from is null or available_from<=now()) and (available_until is null or available_until>now())
  for share;
  if not found then raise exception 'pack_unavailable'; end if;
- weights:=p.rarity_weights;
+ select * into version_row from public.pack_probability_versions where pack_id=p.id order by version desc limit 1 for share;
+ if not found then
+   insert into public.pack_probability_versions(pack_id,version,rarity_weights) values(p.id,1,p.rarity_weights) returning * into version_row;
+ end if;
+ version_id:=version_row.id;
+ weights:=version_row.rarity_weights;
  weight_total:=0;
  foreach r in array enum_range(null::public.card_rarity) loop
    if jsonb_typeof(weights->r::text) is distinct from 'number' then raise exception 'invalid_probability_weights'; end if;
@@ -67,7 +93,6 @@ begin
  insert into public.club_point_balances(user_id,balance) values(uid,1250) on conflict(user_id) do nothing;
  select balance into bal from public.club_point_balances where user_id=uid for update;
  if bal<p.price then raise exception 'insufficient_club_points'; end if;
- select id into version_id from public.pack_probability_versions where pack_id=p.id order by version desc limit 1;
  insert into public.pack_openings(user_id,pack_id,probability_version_id,cost,idempotency_key)
  values(uid,p.id,version_id,p.price,p_idempotency_key) returning id into opening;
  update public.club_point_balances set balance=balance-p.price,updated_at=now() where user_id=uid;
