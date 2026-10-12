@@ -52,7 +52,7 @@ begin
  weights:=p.rarity_weights;
  weight_total:=0;
  foreach r in array enum_range(null::public.card_rarity) loop
-   if jsonb_typeof(weights->r::text) <> 'number' then raise exception 'invalid_probability_weights'; end if;
+   if jsonb_typeof(weights->r::text) is distinct from 'number' then raise exception 'invalid_probability_weights'; end if;
    if (weights->>r::text)::numeric < 0 then raise exception 'invalid_probability_weights'; end if;
    weight_total:=weight_total+(weights->>r::text)::numeric;
    if (weights->>r::text)::numeric>0 and not exists(select 1 from public.card_definitions d where d.is_available and d.rarity=r) then
