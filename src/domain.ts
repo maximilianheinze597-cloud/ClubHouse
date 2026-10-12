@@ -1,5 +1,5 @@
 export type Rarity='Bronze'|'Silber'|'Gold'|'Ultimate'|'Legendär';
-export type Card={id:string;name:string;position:string;rating:number;rarity:Rarity;pace:number;shooting:number;passing:number;dribbling:number;defense:number;physical:number;edition:string;owned:number};
+export type Card={id:string;definitionId?:string;name:string;position:string;rating:number;rarity:Rarity;pace:number;shooting:number;passing:number;dribbling:number;defense:number;physical:number;edition:string;owned:number};
 export const rarities:Rarity[]=['Bronze','Silber','Gold','Ultimate','Legendär'];
 export const initialCards:Card[]=[
 {id:'c1',name:'Johannes Hüller',position:'ST',rating:78,rarity:'Gold',pace:79,shooting:81,passing:72,dribbling:77,defense:34,physical:76,edition:'SVHS · Saison 26/27',owned:1},
