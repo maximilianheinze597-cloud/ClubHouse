@@ -17,6 +17,34 @@
 </head>
 <body>
   <div id="root"><div id="boot"><div><h1>CLUBHOUSE · SVHS</h1><p>Die App wird geladen …</p><p>Falls diese Anzeige bleibt, konnte das App-Script nicht gestartet werden. Lade die Seite einmal neu.</p></div></div></div>
+  <script>
+    (() => {
+      const showError = (title, detail) => {
+        const root = document.getElementById('root');
+        if (!root || !document.getElementById('boot')) return;
+        const safeDetail = String(detail || 'Keine weiteren Angaben').slice(0, 1200);
+        root.innerHTML = '';
+        const panel = document.createElement('div');
+        panel.id = 'boot';
+        panel.innerHTML = '<div><h1 style="color:#ffb6a8">CLUBHOUSE konnte nicht starten</h1><p id="boot-error-title"></p><pre id="boot-error-detail" style="white-space:pre-wrap;overflow-wrap:anywhere;color:#ffd5cd;text-align:left"></pre><p>Bitte sende einen Screenshot dieser Fehlermeldung.</p><button onclick="location.reload()" style="padding:10px 14px;border-radius:8px;border:0">Neu laden</button></div>';
+        panel.querySelector('#boot-error-title').textContent = title;
+        panel.querySelector('#boot-error-detail').textContent = safeDetail;
+        root.appendChild(panel);
+      };
+      window.addEventListener('error', event => {
+        const target = event.target;
+        if (target && target !== window && (target.tagName === 'SCRIPT' || target.tagName === 'LINK')) {
+          showError('Eine App-Datei konnte nicht geladen werden.', target.src || target.href || target.outerHTML);
+        } else if (event.message) {
+          showError('JavaScript-Fehler beim Start.', event.message + (event.filename ? '\\n' + event.filename + ':' + event.lineno : ''));
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', event => {
+        const reason = event.reason;
+        showError('Ein Startvorgang ist fehlgeschlagen.', reason && (reason.stack || reason.message) || String(reason));
+      });
+    })();
+  </script>
   <script type="module" src="./src/main.tsx"></script>
 </body>
 </html>
